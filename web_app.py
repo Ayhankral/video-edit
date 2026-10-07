@@ -2,7 +2,7 @@ import os
 import streamlit as st
 from moviepy.editor import AudioFileClip, CompositeAudioClip, concatenate_audioclips, VideoFileClip, afx
 
-# 1. SAYFA VE TASARIM AYARLARI (Modern Arayüz)
+# 1. SAYFA VE TASARIM AYARLARI
 st.set_page_config(page_title="Radyo & Jenerik Kurgu", page_icon="🎙️", layout="wide")
 
 st.markdown("""
@@ -16,7 +16,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.markdown('<p class="main-header">🎙️ Profesyonel Jenerik Kurgu Stüdyosu</p>', unsafe_allow_html=True)
-st.markdown('<p class="sub-header">Ana şarkınızı ve anonsunuzu yükleyin, sistem saniyeler içinde radyo kalitesinde miksajı yapsın.</p>', unsafe_allow_html=True)
+st.markdown('<p class="sub-header">Ana şarkınızı (veya videonuzu) ve anonsunuzu yükleyin, sistem saniyeler içinde radyo kalitesinde miksajı yapsın.</p>', unsafe_allow_html=True)
 
 # 2. SABİT FON MÜZİĞİ KONTROLÜ
 olasi_uzantilar = [".mp4", ".mp3", ".wav", ".m4a", ".mov"]
@@ -26,51 +26,56 @@ for uzanti in olasi_uzantilar:
         aktif_fon = f"fon{uzanti}"
         break
 
-# 3. KULLANICI ARAYÜZÜ (Kolonlu Yapı)
+# 3. KULLANICI ARAYÜZÜ (mp4 desteği eklendi)
 col1, col2 = st.columns(2, gap="large")
 
 with col1:
-    st.markdown("### 🎵 1. Adım: Ana Şarkı")
-    sarki_dosyasi = st.file_uploader("Ortadan kesilecek ve araya anons girecek ana parçayı seçin.", type=["mp3", "wav", "m4a"])
+    st.markdown("### 🎵 1. Adım: Ana Şarkı / Video")
+    sarki_dosyasi = st.file_uploader("Ortadan kesilecek ses veya VİDEO dosyasını seçin.", type=["mp3", "wav", "m4a", "mp4"])
 
 with col2:
     st.markdown("### 🎤 2. Adım: Anons / Ses Kaydı")
-    ses_dosyasi = st.file_uploader("Araya girecek olan (örneğin ElevenLabs'ten aldığınız) ses kaydını seçin.", type=["mp3", "wav", "m4a"])
+    ses_dosyasi = st.file_uploader("Araya girecek olan anonsu veya VİDEO kaydını seçin.", type=["mp3", "wav", "m4a", "mp4"])
 
 st.markdown("---")
 
-# Uyarı Panelleri
 if not aktif_fon:
     st.error("❌ Sistemde sabit fon dosyası eksik! Lütfen GitHub'a 'fon.mp4' veya 'fon.mp3' dosyanızı yükleyin.")
 
-# 4. İŞLEM BAŞLATMA VE OPTİMİZASYONLU KURGU MOTORU
+# 4. İŞLEM BAŞLATMA VE GELİŞMİŞ UZANTI TANIMA MOTORU
 if st.button("🚀 Kurguyu Başlat ve Birleştir") and sarki_dosyasi and aktif_fon:
     with st.spinner("🎧 Stüdyo motoru çalışıyor, sesler harmanlanıyor... Lütfen bekleyin."):
+        temp_sarki_path = None
+        temp_ses_path = None
         try:
-            # Dosyaları sunucuya geçici olarak yaz
-            with open("temp_sarki.mp3", "wb") as f:
+            # Şarkının orijinal uzantısını al (mp4 vb. hatalarını engeller)
+            sarki_ext = sarki_dosyasi.name.split('.')[-1]
+            temp_sarki_path = f"temp_sarki.{sarki_ext}"
+            
+            with open(temp_sarki_path, "wb") as f:
                 f.write(sarki_dosyasi.read())
             
-            # Ana şarkıyı yükle ve böl
-            sarki = AudioFileClip("temp_sarki.mp3")
+            # AudioFileClip video yüklense bile içindeki sesi otomatik çeker alır
+            sarki = AudioFileClip(temp_sarki_path)
             orta_nokta = sarki.duration / 2.0
 
             sarki_1 = sarki.subclip(0, orta_nokta).audio_fadeout(3.0)
             sarki_2 = sarki.subclip(orta_nokta, sarki.duration).audio_fadein(3.0)
 
-            # Fonu yükle
             if aktif_fon.lower().endswith(('.mp4', '.mov', '.avi', '.mkv')):
                 fon_video = VideoFileClip(aktif_fon)
                 fon = fon_video.audio
             else:
                 fon = AudioFileClip(aktif_fon)
 
-            # Ses kaydı varsa miksle
             if ses_dosyasi:
-                with open("temp_ses.mp3", "wb") as f:
+                ses_ext = ses_dosyasi.name.split('.')[-1]
+                temp_ses_path = f"temp_ses.{ses_ext}"
+                
+                with open(temp_ses_path, "wb") as f:
                     f.write(ses_dosyasi.read())
                 
-                ses_kaydi = AudioFileClip("temp_ses.mp3")
+                ses_kaydi = AudioFileClip(temp_ses_path)
                 jenerik_giris = 1.5
                 jenerik_cikis = 1.5
                 ara_sure = ses_kaydi.duration + jenerik_giris + jenerik_cikis
@@ -85,26 +90,22 @@ if st.button("🚀 Kurguyu Başlat ve Birleştir") and sarki_dosyasi and aktif_f
                 ara_sure = min(fon.duration, 10.0)
                 ara_ses = fon.subclip(0, ara_sure).volumex(0.25).audio_fadein(2.0).audio_fadeout(2.0)
 
-            # Parçaları birleştir
             final_audio = concatenate_audioclips([sarki_1, ara_ses, sarki_2])
             
-            # HIZLANDIRMA: logger=None sayesinde FFMPEG logları iptal edilir, süre %400 kısalır.
             cikti_yolu = "kurgu_hazir.mp3"
             final_audio.write_audiofile(cikti_yolu, fps=44100, logger=None, bitrate="192k")
             
-            # RAM TEMİZLİĞİ: Sitenin çökmesini engeller
+            # Bellek Temizliği
             sarki.close()
             fon.close()
             if ses_dosyasi: ses_kaydi.close()
             final_audio.close()
             
-            # İndirme işlemi için dosyayı belleğe al
             with open(cikti_yolu, "rb") as file:
                 audio_bytes = file.read()
 
             st.success("✅ İşlem Kusursuz Şekilde Tamamlandı!")
             
-            # Modern İndirme Butonu
             st.download_button(
                 label="📥 Hazırlanan Kurguyu İndir",
                 data=audio_bytes,
@@ -112,11 +113,12 @@ if st.button("🚀 Kurguyu Başlat ve Birleştir") and sarki_dosyasi and aktif_f
                 mime="audio/mpeg"
             )
 
-            # SUNUCU DEPOLAMA TEMİZLİĞİ: Çöplük oluşmasını engeller
+            # Dosya Temizliği (Sunucu çökmesini önler)
             os.remove(cikti_yolu)
-            os.remove("temp_sarki.mp3")
-            if ses_dosyasi:
-                os.remove("temp_ses.mp3")
+            if temp_sarki_path and os.path.exists(temp_sarki_path):
+                os.remove(temp_sarki_path)
+            if temp_ses_path and os.path.exists(temp_ses_path):
+                os.remove(temp_ses_path)
 
         except Exception as e:
             st.error(f"Sistem Hatası: {str(e)}")
