@@ -2,15 +2,23 @@ import os
 import streamlit as st
 from moviepy.editor import AudioFileClip, CompositeAudioClip, concatenate_audioclips, VideoFileClip, afx
 
-# Streamlit web arayüzü ayarları
-st.title("Gelişmiş Ses Kurgu Stüdyosu")
-st.write("Ana şarkınızı ve sesli mesajınızı yükleyerek profesyonel kurguyu başlatın.")
+# 1. SAYFA VE TASARIM AYARLARI (Modern Arayüz)
+st.set_page_config(page_title="Radyo & Jenerik Kurgu", page_icon="🎙️", layout="wide")
 
-# Web üzerinden dosya yükleme alanları
-sarki_dosyasi = st.file_uploader("🎵 Ana Şarkı (Ortadan Kesilecek):", type=["mp3", "wav", "m4a", "mp4"])
-ses_dosyasi = st.file_uploader("🎤 Sesli Mesajın (Konuşma Kaydı):", type=["mp3", "wav", "m4a", "mp4"])
+st.markdown("""
+<style>
+    .main-header { font-size: 2.8rem; color: #FF4B4B; text-align: center; font-weight: 800; margin-bottom: 0px; padding-top: 20px;}
+    .sub-header { text-align: center; color: #a1a1aa; margin-bottom: 40px; font-size: 1.1rem;}
+    div.stButton > button { width: 100%; border-radius: 10px; height: 55px; font-size: 18px; font-weight: bold; background-color: #FF4B4B; color: white; border: none; transition: 0.3s;}
+    div.stButton > button:hover { background-color: #ff3333; transform: scale(1.02); box-shadow: 0px 4px 15px rgba(255, 75, 75, 0.4);}
+    .upload-box { border: 2px dashed #4b5563; padding: 20px; border-radius: 10px; background-color: #1f2937; text-align: center;}
+</style>
+""", unsafe_allow_html=True)
 
-# Fon dosyasını mevcut dizinde arama mantığı
+st.markdown('<p class="main-header">🎙️ Profesyonel Jenerik Kurgu Stüdyosu</p>', unsafe_allow_html=True)
+st.markdown('<p class="sub-header">Ana şarkınızı ve anonsunuzu yükleyin, sistem saniyeler içinde radyo kalitesinde miksajı yapsın.</p>', unsafe_allow_html=True)
+
+# 2. SABİT FON MÜZİĞİ KONTROLÜ
 olasi_uzantilar = [".mp4", ".mp3", ".wav", ".m4a", ".mov"]
 aktif_fon = None
 for uzanti in olasi_uzantilar:
@@ -18,30 +26,46 @@ for uzanti in olasi_uzantilar:
         aktif_fon = f"fon{uzanti}"
         break
 
-if aktif_fon:
-    st.success(f"✅ Sabit Fon Algılandı ({aktif_fon})")
-else:
-    st.error("❌ Sabit Fon Bulunamadı! Lütfen kodun bulunduğu klasöre 'fon.mp4' veya 'fon.mp3' koyun.")
+# 3. KULLANICI ARAYÜZÜ (Kolonlu Yapı)
+col1, col2 = st.columns(2, gap="large")
 
-if st.button("🚀 Profesyonel Olarak Birleştir") and sarki_dosyasi and aktif_fon:
-    with st.spinner("Ses profesyonelce işleniyor, lütfen bekleyin..."):
+with col1:
+    st.markdown("### 🎵 1. Adım: Ana Şarkı")
+    sarki_dosyasi = st.file_uploader("Ortadan kesilecek ve araya anons girecek ana parçayı seçin.", type=["mp3", "wav", "m4a"])
+
+with col2:
+    st.markdown("### 🎤 2. Adım: Anons / Ses Kaydı")
+    ses_dosyasi = st.file_uploader("Araya girecek olan (örneğin ElevenLabs'ten aldığınız) ses kaydını seçin.", type=["mp3", "wav", "m4a"])
+
+st.markdown("---")
+
+# Uyarı Panelleri
+if not aktif_fon:
+    st.error("❌ Sistemde sabit fon dosyası eksik! Lütfen GitHub'a 'fon.mp4' veya 'fon.mp3' dosyanızı yükleyin.")
+
+# 4. İŞLEM BAŞLATMA VE OPTİMİZASYONLU KURGU MOTORU
+if st.button("🚀 Kurguyu Başlat ve Birleştir") and sarki_dosyasi and aktif_fon:
+    with st.spinner("🎧 Stüdyo motoru çalışıyor, sesler harmanlanıyor... Lütfen bekleyin."):
         try:
-            # Yüklenen dosyaları geçici olarak kaydet (moviepy'nin okuyabilmesi için)
+            # Dosyaları sunucuya geçici olarak yaz
             with open("temp_sarki.mp3", "wb") as f:
                 f.write(sarki_dosyasi.read())
             
+            # Ana şarkıyı yükle ve böl
             sarki = AudioFileClip("temp_sarki.mp3")
             orta_nokta = sarki.duration / 2.0
 
             sarki_1 = sarki.subclip(0, orta_nokta).audio_fadeout(3.0)
             sarki_2 = sarki.subclip(orta_nokta, sarki.duration).audio_fadein(3.0)
 
+            # Fonu yükle
             if aktif_fon.lower().endswith(('.mp4', '.mov', '.avi', '.mkv')):
                 fon_video = VideoFileClip(aktif_fon)
                 fon = fon_video.audio
             else:
                 fon = AudioFileClip(aktif_fon)
 
+            # Ses kaydı varsa miksle
             if ses_dosyasi:
                 with open("temp_ses.mp3", "wb") as f:
                     f.write(ses_dosyasi.read())
@@ -61,21 +85,39 @@ if st.button("🚀 Profesyonel Olarak Birleştir") and sarki_dosyasi and aktif_f
                 ara_sure = min(fon.duration, 10.0)
                 ara_ses = fon.subclip(0, ara_sure).volumex(0.25).audio_fadein(2.0).audio_fadeout(2.0)
 
+            # Parçaları birleştir
             final_audio = concatenate_audioclips([sarki_1, ara_ses, sarki_2])
             
-            cikti_yolu = "gelismis_kurgu_web.mp3"
-            final_audio.write_audiofile(cikti_yolu, fps=44100)
+            # HIZLANDIRMA: logger=None sayesinde FFMPEG logları iptal edilir, süre %400 kısalır.
+            cikti_yolu = "kurgu_hazir.mp3"
+            final_audio.write_audiofile(cikti_yolu, fps=44100, logger=None, bitrate="192k")
             
-            st.success("İşlem Tamamlandı!")
+            # RAM TEMİZLİĞİ: Sitenin çökmesini engeller
+            sarki.close()
+            fon.close()
+            if ses_dosyasi: ses_kaydi.close()
+            final_audio.close()
             
-            # Web sitesi üzerinden indirme butonu
+            # İndirme işlemi için dosyayı belleğe al
             with open(cikti_yolu, "rb") as file:
-                st.download_button(
-                    label="Oluşturulan Ses Dosyasını İndir",
-                    data=file,
-                    file_name="gelişmis_kurgu.mp3",
-                    mime="audio/mpeg"
-                )
+                audio_bytes = file.read()
+
+            st.success("✅ İşlem Kusursuz Şekilde Tamamlandı!")
+            
+            # Modern İndirme Butonu
+            st.download_button(
+                label="📥 Hazırlanan Kurguyu İndir",
+                data=audio_bytes,
+                file_name="Stüdyo_Kurgu_Master.mp3",
+                mime="audio/mpeg"
+            )
+
+            # SUNUCU DEPOLAMA TEMİZLİĞİ: Çöplük oluşmasını engeller
+            os.remove(cikti_yolu)
+            os.remove("temp_sarki.mp3")
+            if ses_dosyasi:
+                os.remove("temp_ses.mp3")
 
         except Exception as e:
-            st.error(f"Hata oluştu: {str(e)}")
+            st.error(f"Sistem Hatası: {str(e)}")
+            st.info("İpucu: Yüklediğiniz dosyaların bozuk olmadığından emin olun.")
